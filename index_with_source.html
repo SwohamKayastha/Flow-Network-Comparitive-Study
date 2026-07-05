@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Network Visualizer Project</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f7f6;
+        }
+        #sidebar {
+            width: 320px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        #sidebar h2 {
+            margin-top: 0;
+            font-size: 22px;
+            border-bottom: 2px solid #34495e;
+            padding-bottom: 10px;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            background: #34495e;
+            border: 1px solid #1abc9c;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #stats {
+            background: #1a252f;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        #stats span {
+            font-weight: bold;
+            color: #1abc9c;
+        }
+        .legend {
+            margin-top: 20px;
+            background: #1a252f;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .color-box {
+            width: 16px;
+            height: 16px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+        #loading {
+            display: none;
+            color: #f1c40f;
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #network-container {
+            flex-grow: 1;
+            position: relative;
+        }
+        #mynetwork {
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Flow Network Visualizer</h2>
+        
+        <div class="control-group">
+            <label for="fileInput" style="display:block; margin-bottom:8px;">Upload .tntp File:</label>
+            <input type="file" id="fileInput" accept=".tntp,.txt" />
+        </div>
+        
+        <div id="loading">Building Network Graph...<br>Calculating Layout...</div>
+
+        <div id="stats" style="display: none;">
+            <h3>Network Stats</h3>
+            Total Zones (Sources/Sinks): <span id="stat-zones">0</span><br>
+            Total Nodes: <span id="stat-nodes">0</span><br>
+            Total Links (Edges): <span id="stat-links">0</span>
+        </div>
+
+        <div class="legend">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <div class="color-box" style="background: #e74c3c; border-radius: 50%;"></div>
+                <span>Source / Sink (Zone)</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-box" style="background: #3498db; border-radius: 50%;"></div>
+                <span>Intersection (Thru Node)</span>
+            </div>
+            <div class="legend-item" style="margin-top: 10px;">
+                <span><em>Edge thickness represents capacity</em></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="network-container">
+        <div id="mynetwork"></div>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('stats').style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                setTimeout(() => parseAndVisualize(text), 100); // Small delay to allow UI to show loading text
+            };
+            reader.readAsText(file);
+        });
+
+        function parseAndVisualize(text) {
+            const lines = text.split('\n');
+            let edgesArr = [];
+            let nodeSet = new Set();
+            
+            // Metadata defaults
+            let numZones = 0;
+            let numNodes = 0;
+            let firstThruNode = 0;
+            let parsingData = false;
+
+            // Parse TNTP file
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                
+                // Extract Metadata
+                if (line.includes('<NUMBER OF ZONES>')) {
+                    numZones = parseInt(line.replace(/[^0-9]/g, ''), 10);
+                } else if (line.includes('<NUMBER OF NODES>')) {
+                    numNodes = parseInt(line.replace(/[^0-9]/g, ''), 10);
+                } else if (line.includes('<FIRST THRU NODE>')) {
+                    firstThruNode = parseInt(line.replace(/[^0-9]/g, ''), 10);
+                }
+                
+                if (line.startsWith('<END OF METADATA>')) {
+                    parsingData = true;
+                    continue;
+                }
+                
+                if (!parsingData) continue;
+                if (line.startsWith('~')) continue;
+                if (line === '') continue;
+
+                let parts = line.split(/[\s\t]+/);
+                parts = parts.filter(p => p !== ''); 
+
+                if (parts.length >= 4) {
+                    let fromNode = parseInt(parts[0], 10);
+                    let toNode = parseInt(parts[1], 10);
+                    let capacity = parseFloat(parts[2]);
+                    let length = parseFloat(parts[3]);
+                    let freeFlowTime = parseFloat(parts[4] || 0);
+
+                    if (!isNaN(fromNode) && !isNaN(toNode)) {
+                        nodeSet.add(fromNode);
+                        nodeSet.add(toNode);
+                        
+                        // Use HTML for tooltips (title)
+                        let tooltip = `
+                            <b>Link:</b> ${fromNode} &#8594; ${toNode}<br>
+                            <b>Capacity:</b> ${capacity} veh/h<br>
+                            <b>Length:</b> ${length} ft<br>
+                            <b>Free Flow Time:</b> ${freeFlowTime} min
+                        `;
+
+                        edgesArr.push({ 
+                            from: fromNode, 
+                            to: toNode,
+                            value: capacity, // Vis.js automatically scales edge width using 'value'
+                            title: tooltip,
+                            arrows: 'to'
+                        });
+                    }
+                }
+            }
+
+            // Update Stats UI
+            document.getElementById('stat-zones').innerText = numZones;
+            document.getElementById('stat-nodes').innerText = nodeSet.size;
+            document.getElementById('stat-links').innerText = edgesArr.length;
+            document.getElementById('stats').style.display = 'block';
+
+            // Create nodes array with differentiation for Sources/Sinks vs regular nodes
+            let nodesArr = Array.from(nodeSet).map(id => {
+                let isZone = id <= numZones;
+                return { 
+                    id: id, 
+                    label: isZone ? `Z-${id}` : `${id}`,
+                    group: isZone ? 'zone' : 'intersection',
+                    title: isZone ? `Source/Sink Zone ${id}` : `Intersection ${id}`
+                };
+            });
+
+            drawNetwork(nodesArr, edgesArr);
+        }
+
+        function drawNetwork(nodesArr, edgesArr) {
+            const container = document.getElementById('mynetwork');
+            
+            const data = {
+                nodes: new vis.DataSet(nodesArr),
+                edges: new vis.DataSet(edgesArr)
+            };
+
+            const options = {
+                groups: {
+                    zone: { // Sources and Sinks
+                        shape: 'dot',
+                        size: 20,
+                        color: { background: '#e74c3c', border: '#c0392b' },
+                        font: { color: '#ffffff', size: 10 }
+                    },
+                    intersection: { // Regular Nodes
+                        shape: 'dot',
+                        size: 8,
+                        color: { background: '#3498db', border: '#2980b9' },
+                        font: { size: 12, strokeWidth: 2, strokeColor: '#ffffff' }
+                    }
+                },
+                edges: {
+                    scaling: {
+                        min: 1,
+                        max: 8, // Max thickness for the highest capacity edge
+                        label: { enabled: false }
+                    },
+                    color: { inherit: 'from', opacity: 0.6 },
+                    smooth: { type: 'continuous' }
+                },
+                physics: {
+                    forceAtlas2Based: {
+                        gravitationalConstant: -70,
+                        centralGravity: 0.005,
+                        springConstant: 0.04,
+                        springLength: 120,
+                        damping: 0.6
+                    },
+                    maxVelocity: 40,
+                    solver: 'forceAtlas2Based',
+                    timestep: 0.35,
+                    stabilization: {
+                        enabled: true,
+                        iterations: 1500, // Higher iterations for complex networks
+                        updateInterval: 100
+                    }
+                },
+                interaction: {
+                    tooltipDelay: 100,
+                    hover: true
+                }
+            };
+
+            const network = new vis.Network(container, data, options);
+
+            // Hide loading text once physics stabilize
+            network.on("stabilizationIterationsDone", function () {
+                document.getElementById('loading').style.display = 'none';
+                network.setOptions( { physics: false } ); // Turn off physics to save CPU after layout
+            });
+        }
+    </script>
+</body>
+</html>
