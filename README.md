@@ -41,9 +41,9 @@ Dataset format:
 
 - `.tntp` text format
 - Common useful columns include:
-	- `Init node` (from node)
-	- `Term node` (to node)
-	- `Capacity` (edge capacity)
+  - `Init node` (from node)
+  - `Term node` (to node)
+  - `Capacity` (edge capacity)
 
 For algorithm comparison, we mainly need these 3 fields to build the graph.
 
@@ -52,9 +52,9 @@ For algorithm comparison, we mainly need these 3 fields to build the graph.
 1. Read the `.tntp` file as plain text.
 2. Skip metadata/comment/header lines.
 3. For each valid row, extract:
-	 - from node (`Init node`)
-	 - to node (`Term node`)
-	 - capacity (`Capacity`)
+   - from node (`Init node`)
+   - to node (`Term node`)
+   - capacity (`Capacity`)
 4. Build a directed graph.
 5. Choose source and sink nodes.
 6. Run both algorithms on the same graph.
@@ -86,3 +86,31 @@ Other useful metrics:
 
 - `Flow-Network-Comparitive-Study/index_with_source.html` (support material for visualization of dataset)
 - `Flow-Network-Comparitive-Study/dataset/Anaheim_net.tntp` (main dataset)
+
+```
+maxflow-comparison/
+├── dataset/
+│ └── anaheim/
+│ └── Anaheim_net.tntp
+│
+├── src/
+│ ├── graph/
+│ │ ├── tntp_parser.py
+│ │ └── synthetic_generator.py
+│ ├── algorithms/
+│ │ ├── base_maxflow.py
+│ │ ├── ford_fulkerson.py
+│ │ └── edmonds_karp.py
+│ ├── metrics/
+│ │ └── collector.py
+│ ├── experiments/
+│ │ └── runner.py
+│ └── visualization/
+│ └── plots.py
+│
+├── app.py # ← just one file, at root, nothing fancy
+├── results/
+├── tests/
+├── requirements.txt
+└── README.md
+```
