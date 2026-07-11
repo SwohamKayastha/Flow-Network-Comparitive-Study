@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ford-Fulkerson JSON Report Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #121a31;
+            --panel-2: #18213d;
+            --text: #eef2ff;
+            --muted: #a9b4d0;
+            --accent: #7dd3fc;
+            --accent-2: #f59e0b;
+            --accent-3: #34d399;
+            --border: rgba(148, 163, 184, 0.22);
+            --danger: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(125, 211, 252, 0.12), transparent 28%),
+                radial-gradient(circle at top right, rgba(52, 211, 153, 0.10), transparent 24%),
+                linear-gradient(180deg, #08101e 0%, #0b1020 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .shell {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.4fr 0.9fr;
+            gap: 18px;
+            align-items: stretch;
+            margin-bottom: 18px;
+        }
+
+        .title-card, .upload-card, .card {
+            background: rgba(18, 26, 49, 0.82);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(10px);
+        }
+
+        .title-card {
+            padding: 26px;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: clamp(30px, 4vw, 48px);
+            line-height: 1.05;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            max-width: 70ch;
+            line-height: 1.6;
+        }
+
+        .upload-card {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            justify-content: center;
+        }
+
+        .upload-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            color: var(--muted);
+            background: var(--panel-2);
+            border: 1px dashed rgba(125, 211, 252, 0.45);
+            padding: 14px;
+            border-radius: 12px;
+        }
+
+        button {
+            appearance: none;
+            border: 0;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-weight: 700;
+            cursor: pointer;
+            color: #09101b;
+            background: linear-gradient(135deg, var(--accent) 0%, #93c5fd 100%);
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%);
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin: 18px 0;
+        }
+
+        .card {
+            padding: 18px;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: clamp(24px, 3vw, 40px);
+            font-weight: 800;
+            word-break: break-word;
+        }
+
+        .metric-note {
+            color: var(--muted);
+            margin-top: 8px;
+            font-size: 13px;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 18px;
+        }
+
+        .panel {
+            background: rgba(18, 26, 49, 0.82);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel h2 {
+            margin: 0 0 12px;
+            font-size: 20px;
+        }
+
+        .charts {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
+        }
+
+        .chart {
+            min-height: 320px;
+            width: 100%;
+        }
+
+        .log-wrap {
+            overflow: auto;
+            max-height: 720px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(10, 16, 33, 0.75);
+        }
+
+        th, td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #121a31;
+            z-index: 1;
+            cursor: pointer;
+        }
+
+        tr:hover td {
+            background: rgba(125, 211, 252, 0.06);
+        }
+
+        .path {
+            white-space: normal;
+            max-width: 520px;
+            color: #dbeafe;
+        }
+
+        .empty-state {
+            padding: 18px;
+            color: var(--muted);
+            border: 1px dashed rgba(148, 163, 184, 0.3);
+            border-radius: 14px;
+            background: rgba(18, 26, 49, 0.55);
+        }
+
+        .status {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .status.error {
+            color: var(--danger);
+        }
+
+        .status.ok {
+            color: var(--accent-3);
+        }
+
+        @media (max-width: 1100px) {
+            .hero, .layout, .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="hero">
+            <div class="title-card">
+                <h1>Ford-Fulkerson JSON Viewer</h1>
+                <p class="subtitle">
+                    Load the exported results JSON from the Streamlit app and inspect the max flow summary,
+                    iteration metrics, and augmenting paths in one place.
+                </p>
+            </div>
+            <div class="upload-card">
+                <input id="fileInput" type="file" accept="application/json,.json" />
+                <div class="upload-row">
+                    <button id="loadDemoBtn" class="secondary" type="button">Load Demo Data</button>
+                    <button id="clearBtn" type="button">Clear View</button>
+                </div>
+                <div class="hint">
+                    Your exported file should contain: dataset, source, sink, max_flow, iterations, runtime_ms,
+                    generated_at, and iteration_log.
+                </div>
+                <div id="status" class="status">Waiting for a JSON file...</div>
+            </div>
+        </div>
+
+        <div class="grid" id="metricsGrid">
+            <div class="card"><div class="metric-label">Dataset</div><div class="metric-value" id="datasetMetric">-</div></div>
+            <div class="card"><div class="metric-label">Source / Sink</div><div class="metric-value" id="zonesMetric">-</div></div>
+            <div class="card"><div class="metric-label">Max Flow</div><div class="metric-value" id="flowMetric">-</div></div>
+            <div class="card"><div class="metric-label">Iterations</div><div class="metric-value" id="iterMetric">-</div></div>
+            <div class="card"><div class="metric-label">Runtime (ms)</div><div class="metric-value" id="runtimeMetric">-</div></div>
+            <div class="card"><div class="metric-label">Generated</div><div class="metric-value" id="generatedMetric">-</div></div>
+            <div class="card"><div class="metric-label">Average Bottleneck</div><div class="metric-value" id="avgBottleneckMetric">-</div></div>
+            <div class="card"><div class="metric-label">Last Cumulative Flow</div><div class="metric-value" id="lastFlowMetric">-</div></div>
+        </div>
+
+        <div class="layout">
+            <div class="panel">
+                <h2>Charts</h2>
+                <div class="charts">
+                    <div id="bottleneckChart" class="chart"></div>
+                    <div id="flowChart" class="chart"></div>
+                    <div id="lengthChart" class="chart"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Run Details</h2>
+                <div id="details" class="empty-state">Load a JSON file to see the report details.</div>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-top:18px;">
+            <h2>Iteration Log</h2>
+            <div class="log-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th data-sort="index">#</th>
+                            <th data-sort="length">Path Length</th>
+                            <th data-sort="bottleneck">Bottleneck</th>
+                            <th data-sort="cumulative_flow">Cumulative Flow</th>
+                            <th>Path</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logBody">
+                        <tr><td colspan="5" class="empty-state">No data loaded yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            report: null,
+            iterationLog: [],
+            sortKey: 'index',
+            sortAsc: true,
+        };
+
+        const demoReport = {
+            dataset: 'Berlin-Center',
+            source: 1,
+            sink: 865,
+            max_flow: 15055,
+            iterations: 7,
+            runtime_ms: 0.41,
+            generated_at: new Date().toISOString(),
+            iteration_log: [
+                { path: [1, 117, 116, 115, 865], length: 4, bottleneck: 1200, cumulative_flow: 1200 },
+                { path: [1, 87, 86, 85, 865], length: 4, bottleneck: 1800, cumulative_flow: 3000 },
+                { path: [1, 74, 73, 72, 865], length: 4, bottleneck: 2200, cumulative_flow: 5200 },
+                { path: [1, 233, 232, 231, 865], length: 4, bottleneck: 1900, cumulative_flow: 7100 },
+                { path: [1, 165, 164, 163, 865], length: 4, bottleneck: 2400, cumulative_flow: 9500 },
+                { path: [1, 213, 212, 211, 865], length: 4, bottleneck: 2255, cumulative_flow: 11755 },
+                { path: [1, 253, 252, 251, 865], length: 4, bottleneck: 3300, cumulative_flow: 15055 },
+            ]
+        };
+
+        const fileInput = document.getElementById('fileInput');
+        const statusEl = document.getElementById('status');
+        const detailsEl = document.getElementById('details');
+        const logBodyEl = document.getElementById('logBody');
+        const columns = ['index', 'length', 'bottleneck', 'cumulative_flow'];
+
+        document.getElementById('loadDemoBtn').addEventListener('click', () => loadReport(demoReport));
+        document.getElementById('clearBtn').addEventListener('click', clearView);
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const report = JSON.parse(text);
+                loadReport(report);
+                setStatus(`Loaded ${file.name}`, 'ok');
+            } catch (error) {
+                setStatus(`Could not read JSON: ${error.message}`, 'error');
+            }
+        });
+
+        function clearView() {
+            state.report = null;
+            state.iterationLog = [];
+            setMetricsEmpty();
+            detailsEl.innerHTML = '<div class="empty-state">Load a JSON file to see the report details.</div>';
+            logBodyEl.innerHTML = '<tr><td colspan="5" class="empty-state">No data loaded yet.</td></tr>';
+            Plotly.purge('bottleneckChart');
+            Plotly.purge('flowChart');
+            Plotly.purge('lengthChart');
+            setStatus('Waiting for a JSON file...');
+            fileInput.value = '';
+        }
+
+        function loadReport(report) {
+            state.report = report;
+            state.iterationLog = Array.isArray(report.iteration_log) ? [...report.iteration_log] : [];
+            renderMetrics(report);
+            renderDetails(report);
+            renderCharts(state.iterationLog);
+            renderTable();
+            setStatus('Report loaded successfully.', 'ok');
+        }
+
+        function setStatus(message, kind = '') {
+            statusEl.textContent = message;
+            statusEl.className = kind ? `status ${kind}` : 'status';
+        }
+
+        function setMetricsEmpty() {
+            document.getElementById('datasetMetric').textContent = '-';
+            document.getElementById('zonesMetric').textContent = '-';
+            document.getElementById('flowMetric').textContent = '-';
+            document.getElementById('iterMetric').textContent = '-';
+            document.getElementById('runtimeMetric').textContent = '-';
+            document.getElementById('generatedMetric').textContent = '-';
+            document.getElementById('avgBottleneckMetric').textContent = '-';
+            document.getElementById('lastFlowMetric').textContent = '-';
+        }
+
+        function renderMetrics(report) {
+            const log = Array.isArray(report.iteration_log) ? report.iteration_log : [];
+            const avgBottleneck = log.length
+                ? log.reduce((sum, item) => sum + Number(item.bottleneck || 0), 0) / log.length
+                : 0;
+            const lastFlow = log.length ? Number(log[log.length - 1].cumulative_flow || report.max_flow || 0) : Number(report.max_flow || 0);
+
+            document.getElementById('datasetMetric').textContent = report.dataset ?? '-';
+            document.getElementById('zonesMetric').textContent = `${report.source ?? '-'} / ${report.sink ?? '-'}`;
+            document.getElementById('flowMetric').textContent = Number(report.max_flow ?? 0).toLocaleString();
+            document.getElementById('iterMetric').textContent = Number(report.iterations ?? 0).toLocaleString();
+            document.getElementById('runtimeMetric').textContent = Number(report.runtime_ms ?? 0).toFixed(2);
+            document.getElementById('generatedMetric').textContent = formatDate(report.generated_at);
+            document.getElementById('avgBottleneckMetric').textContent = avgBottleneck ? avgBottleneck.toFixed(2) : '-';
+            document.getElementById('lastFlowMetric').textContent = lastFlow ? Number(lastFlow).toLocaleString() : '-';
+        }
+
+        function renderDetails(report) {
+            const entries = [
+                ['Dataset', report.dataset],
+                ['Source', report.source],
+                ['Sink', report.sink],
+                ['Max Flow', report.max_flow],
+                ['Iterations', report.iterations],
+                ['Runtime (ms)', Number(report.runtime_ms ?? 0).toFixed(2)],
+                ['Generated At', formatDate(report.generated_at)],
+            ];
+
+            detailsEl.innerHTML = `
+                <div style="display:grid;gap:10px;">
+                    ${entries.map(([label, value]) => `
+                        <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 12px;background:rgba(10,16,33,0.65);border:1px solid rgba(148,163,184,0.14);border-radius:12px;">
+                            <span style="color:var(--muted);">${label}</span>
+                            <strong style="text-align:right;">${value ?? '-'}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderCharts(log) {
+            const x = log.map((_, index) => index + 1);
+            const bottleneck = log.map(item => Number(item.bottleneck || 0));
+            const flow = log.map(item => Number(item.cumulative_flow || 0));
+            const length = log.map(item => Number(item.length || 0));
+
+            const baseLayout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(10, 16, 33, 0.55)',
+                font: { color: '#eef2ff' },
+                margin: { l: 60, r: 20, t: 40, b: 55 },
+                xaxis: { gridcolor: 'rgba(148,163,184,0.15)', title: 'Iteration' },
+                yaxis: { gridcolor: 'rgba(148,163,184,0.15)' },
+            };
+
+            if (!log.length) {
+                Plotly.purge('bottleneckChart');
+                Plotly.purge('flowChart');
+                Plotly.purge('lengthChart');
+                document.getElementById('bottleneckChart').innerHTML = '<div class="empty-state">No iteration log to chart.</div>';
+                document.getElementById('flowChart').innerHTML = '<div class="empty-state">No iteration log to chart.</div>';
+                document.getElementById('lengthChart').innerHTML = '<div class="empty-state">No iteration log to chart.</div>';
+                return;
+            }
+
+            Plotly.newPlot('bottleneckChart', [{
+                x,
+                y: bottleneck,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#7dd3fc', width: 3 },
+                marker: { color: '#7dd3fc', size: 8 },
+                name: 'Bottleneck'
+            }], {
+                ...baseLayout,
+                title: 'Bottleneck per Augmenting Path'
+            }, { responsive: true });
+
+            Plotly.newPlot('flowChart', [{
+                x,
+                y: flow,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#34d399', width: 3 },
+                marker: { color: '#34d399', size: 8 },
+                name: 'Cumulative Flow'
+            }], {
+                ...baseLayout,
+                title: 'Cumulative Flow Growth'
+            }, { responsive: true });
+
+            Plotly.newPlot('lengthChart', [{
+                x,
+                y: length,
+                type: 'bar',
+                marker: { color: '#f59e0b' },
+                name: 'Path Length'
+            }], {
+                ...baseLayout,
+                title: 'Path Length per Augmenting Path'
+            }, { responsive: true });
+        }
+
+        function renderTable() {
+            const rows = [...state.iterationLog]
+                .map((item, index) => ({
+                    index: index + 1,
+                    path: Array.isArray(item.path) ? item.path.join(' → ') : '-',
+                    length: Number(item.length || 0),
+                    bottleneck: Number(item.bottleneck || 0),
+                    cumulative_flow: Number(item.cumulative_flow || 0),
+                }))
+                .sort((a, b) => sortValue(a[state.sortKey], b[state.sortKey], state.sortAsc));
+
+            if (!rows.length) {
+                logBodyEl.innerHTML = '<tr><td colspan="5" class="empty-state">No iteration log available.</td></tr>';
+                return;
+            }
+
+            logBodyEl.innerHTML = rows.map(row => `
+                <tr>
+                    <td>${row.index}</td>
+                    <td>${row.length}</td>
+                    <td>${row.bottleneck}</td>
+                    <td>${row.cumulative_flow}</td>
+                    <td class="path">${row.path}</td>
+                </tr>
+            `).join('');
+        }
+
+        function sortValue(a, b, asc) {
+            if (typeof a === 'string' || typeof b === 'string') {
+                return asc ? String(a).localeCompare(String(b)) : String(b).localeCompare(String(a));
+            }
+            return asc ? a - b : b - a;
+        }
+
+        function formatDate(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+        }
+
+        document.querySelectorAll('th[data-sort]').forEach(header => {
+            header.addEventListener('click', () => {
+                const sortKey = header.dataset.sort;
+                if (state.sortKey === sortKey) {
+                    state.sortAsc = !state.sortAsc;
+                } else {
+                    state.sortKey = sortKey;
+                    state.sortAsc = true;
+                }
+                renderTable();
+            });
+        });
+
+        clearView();
+    </script>
+</body>
+</html>

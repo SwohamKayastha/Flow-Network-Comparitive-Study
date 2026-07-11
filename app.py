@@ -1,3 +1,6 @@
+import json
+from datetime import datetime
+
 import streamlit as st
 from src.graph.tntp_parser import parse_tntp
 from src.algorithms.ford_fulkerson import FordFulkerson
@@ -19,7 +22,37 @@ st.title("Flow Network Visualizer")
 # --- Dataset selection ---
 DATASETS = {
     "Anaheim": "dataset/anaheim/Anaheim_net.tntp",
+    "Sioux Falls": "dataset/sinoux/SiouxFalls_net.tntp",
+    "Berlin Center": "dataset/berlin_center/berlin-center_net.tntp",
 }
+
+MAX_EXPLORER_NODES = 2000
+MAX_EXPLORER_EDGES = 5000
+
+
+def _slugify(value: str) -> str:
+    return value.lower().replace(" ", "_")
+
+
+def _render_download_button(algorithm_name: str, dataset_name: str, source: str, sink: str, result: dict) -> None:
+    report = {
+        "algorithm": algorithm_name,
+        "dataset": dataset_name,
+        "source": source,
+        "sink": sink,
+        "max_flow": result["max_flow"],
+        "iterations": result["iterations"],
+        "runtime_ms": result["runtime_ms"],
+        "generated_at": datetime.now().isoformat(),
+        "iteration_log": result["iteration_log"],
+    }
+
+    st.download_button(
+        label="Download Results as JSON",
+        data=json.dumps(report, indent=2),
+        file_name=f"{_slugify(algorithm_name)}_{_slugify(dataset_name)}_{source}_{sink}.json",
+        mime="application/json",
+    )
 
 dataset_name = st.sidebar.selectbox("Dataset", list(DATASETS.keys()))
 graph = parse_tntp(DATASETS[dataset_name])
@@ -36,13 +69,22 @@ st.sidebar.markdown("🔵 Intersection (Thru Node)")
 st.sidebar.caption("Edge thickness represents capacity")
 
 # --- Tabs ---
-tab1, tab2, tab3 = st.tabs(
-    ["Network Explorer", "Run Ford-Fulkerson (DFS)", "Run Edmonds-Karp (BFS)"]
-)
+tab1, tab2, tab3 = st.tabs(["Network Explorer", "Run Ford-Fulkerson (DFS)", "Run Edmonds-Karp (BFS)"])
 
 with tab1:
     st.subheader("Full Network Overview")
-    render_network_explorer(graph)
+    node_count = graph.number_of_nodes()
+    edge_count = graph.number_of_edges()
+
+    if node_count < 2 or edge_count == 0:
+        st.info("This dataset is too small to render a meaningful network explorer.")
+    elif node_count > MAX_EXPLORER_NODES or edge_count > MAX_EXPLORER_EDGES:
+        st.warning(
+            f"This dataset is too large for the full network explorer ({node_count} nodes, {edge_count} edges). "
+            "Run a max-flow algorithm to view the explored subgraph instead."
+        )
+    else:
+        render_network_explorer(graph)
 
 with tab2:
     st.subheader("Run Ford-Fulkerson")
@@ -67,6 +109,8 @@ with tab2:
             m1.metric("Max Flow", f"{result['max_flow']:.0f}")
             m2.metric("Iterations", result["iterations"])
             m3.metric("Runtime (ms)", f"{result['runtime_ms']:.2f}")
+
+            _render_download_button("ford_fulkerson", dataset_name, source, sink, result)
 
             if result["iterations"] == 0:
                 st.warning("No path found between source and sink.")
@@ -107,6 +151,8 @@ with tab3:
             m1.metric("Max Flow", f"{result['max_flow']:.0f}")
             m2.metric("Iterations", result["iterations"])
             m3.metric("Runtime (ms)", f"{result['runtime_ms']:.2f}")
+
+            _render_download_button("edmonds_karp", dataset_name, source, sink, result)
 
             if result["iterations"] == 0:
                 st.warning("No path found between source and sink.")
