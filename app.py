@@ -1,6 +1,7 @@
 import streamlit as st
 from src.graph.tntp_parser import parse_tntp
 from src.algorithms.ford_fulkerson import FordFulkerson
+from src.algorithms.edmonds_karp import EdmondsKarp
 from src.visualization.plots import (
     bottleneck_per_iteration,
     path_length_per_iteration,
@@ -35,7 +36,9 @@ st.sidebar.markdown("🔵 Intersection (Thru Node)")
 st.sidebar.caption("Edge thickness represents capacity")
 
 # --- Tabs ---
-tab1, tab2 = st.tabs(["Network Explorer", "Run Ford-Fulkerson (DFS)"])
+tab1, tab2, tab3 = st.tabs(
+    ["Network Explorer", "Run Ford-Fulkerson (DFS)", "Run Edmonds-Karp (BFS)"]
+)
 
 with tab1:
     st.subheader("Full Network Overview")
@@ -48,9 +51,9 @@ with tab2:
 
     col1, col2 = st.columns(2)
     with col1:
-        source = st.selectbox("Source (zone)", zone_nodes, index=0)
+        source = st.selectbox("Source (zone)", zone_nodes, index=0, key="ff_source")
     with col2:
-        sink = st.selectbox("Sink (zone)", zone_nodes, index=len(zone_nodes) - 1)
+        sink = st.selectbox("Sink (zone)", zone_nodes, index=len(zone_nodes) - 1, key="ff_sink")
 
     if st.button("Run Ford-Fulkerson"):
         if source == sink:
@@ -72,6 +75,46 @@ with tab2:
 
                 st.subheader("Explored Subgraph")
                 render_relevant_subgraph(graph, source, sink, ff.all_visited, highlight_path=last_path)
+
+                st.subheader("Iteration Metrics")
+                st.plotly_chart(bottleneck_per_iteration(result), use_container_width=True)
+                st.plotly_chart(path_length_per_iteration(result), use_container_width=True)
+                st.plotly_chart(cumulative_flow(result), use_container_width=True)
+
+                with st.expander("Raw iteration log"):
+                    st.dataframe(result["iteration_log"])
+
+with tab3:
+    st.subheader("Run Edmonds-Karp")
+
+    zone_nodes = sorted(graph.graph['zone_nodes'])
+
+    col1, col2 = st.columns(2)
+    with col1:
+        source = st.selectbox("Source (zone)", zone_nodes, index=0, key="ek_source")
+    with col2:
+        sink = st.selectbox("Sink (zone)", zone_nodes, index=len(zone_nodes) - 1, key="ek_sink")
+
+    if st.button("Run Edmonds-Karp"):
+        if source == sink:
+            st.error("Source and sink must be different nodes.")
+        else:
+            with st.spinner("Running BFS-based Edmonds-Karp..."):
+                ek = EdmondsKarp(graph, source, sink)
+                result = ek.run()
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Max Flow", f"{result['max_flow']:.0f}")
+            m2.metric("Iterations", result["iterations"])
+            m3.metric("Runtime (ms)", f"{result['runtime_ms']:.2f}")
+
+            if result["iterations"] == 0:
+                st.warning("No path found between source and sink.")
+            else:
+                last_path = result["iteration_log"][-1]["path"]
+
+                st.subheader("Explored Subgraph")
+                render_relevant_subgraph(graph, source, sink, ek.all_visited, highlight_path=last_path)
 
                 st.subheader("Iteration Metrics")
                 st.plotly_chart(bottleneck_per_iteration(result), use_container_width=True)
